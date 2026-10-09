@@ -240,12 +240,13 @@ Extend the chain with priority-ordered config files `~/.config/aurscan/llm1.conf
 | key | meaning |
 |---|---|
 | `backend` | `claude` · `codex` · `api` · `openai` · or a `/path/to/exe` (a custom command, like `AURSCAN_BACKEND`) |
-| `model` | model id for `api` / `codex` / `openai` |
+| `model` | model id for `api` / `claude` / `codex` / `openai` |
 | `url` | endpoint override (`openai` `/chat/completions`, or an Anthropic-compatible `/v1/messages` gateway for `api`) |
 | `fallback` | secondary `openai` URL (intra-backend, like `AURSCAN_OPENAI_URL_FALLBACK`) |
 | `api_key` | bearer / `x-api-key` for this backend |
 | `temperature` | sampling temperature for `openai` (default `0.1`); reasoning models such as **Gemma** usually need `1.0` |
-| `max_tokens` | output-token budget (default `2000`); raise it for reasoning models that would otherwise spend the budget on hidden reasoning and return empty |
+| `max_tokens` | output-token budget (default `2000`; for `claude`, the Claude Code default); raise it for reasoning models that would otherwise spend the budget on hidden reasoning and return empty |
+| `effort` | effort level for `claude` (`--effort`) |
 
 ```ini
 # ~/.config/aurscan/llm1.conf — try the local GPU box first
@@ -419,6 +420,9 @@ aurscan --debug --score ./PKGBUILD
 |---|---|---|
 | `AURSCAN_BACKEND` | auto | `claude` · `codex` · `api` · `openai` · `/path/to/cmd` |
 | `AURSCAN_MODEL` | `claude-sonnet-4-6` | model id for the API backend |
+| `AURSCAN_CLAUDE_MODEL` | Claude Code default | model id passed to `claude --model` |
+| `AURSCAN_CLAUDE_EFFORT` | Claude Code default | effort level passed to `claude --effort` |
+| `AURSCAN_CLAUDE_MAX_TOKENS` | Claude Code default | output-token budget, passed to `claude` as `CLAUDE_CODE_MAX_OUTPUT_TOKENS` |
 | `AURSCAN_CODEX_MODEL` | Codex default | model id passed to `codex exec` |
 | `AURSCAN_MAX_PKGS` | `25` | recursion cap for AUR dependency scanning |
 | `AURSCAN_PRICE_IN` / `AURSCAN_PRICE_OUT` | built-in | USD per million tokens |

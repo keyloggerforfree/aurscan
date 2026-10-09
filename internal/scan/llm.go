@@ -62,7 +62,7 @@ func DefaultModel() string {
 type Backend struct {
 	Kind     string // "claude", "codex", "api", "openai", or "cmd"
 	Cmd      string // executable path when Kind == "cmd"
-	Model    string // AURSCAN_MODEL / AURSCAN_CODEX_MODEL / AURSCAN_OPENAI_MODEL (per kind)
+	Model    string // AURSCAN_MODEL / AURSCAN_CLAUDE_MODEL / AURSCAN_CODEX_MODEL / AURSCAN_OPENAI_MODEL (per kind)
 	URL      string // openai /chat/completions URL (or an Anthropic-compatible /v1/messages gateway for "api")
 	Fallback string // openai secondary URL (intra-backend, like AURSCAN_OPENAI_URL_FALLBACK)
 	APIKey   string // ANTHROPIC_API_KEY / AURSCAN_OPENAI_API_KEY
@@ -74,6 +74,9 @@ type Backend struct {
 	// the default). Reasoning models spend the budget on hidden reasoning before
 	// the answer, so a small cap can be exhausted before any content is emitted.
 	MaxTokens int
+	// Effort is the Claude Code effort level (--effort). Empty means "unset"
+	// (use AURSCAN_CLAUDE_EFFORT or the CLI's own default).
+	Effort string
 }
 
 // String renders a Backend for debug output with the secret redacted.
@@ -116,7 +119,7 @@ func (b Backend) ModelID() string {
 	case "codex":
 		return nz(b.Model, os.Getenv("AURSCAN_CODEX_MODEL"))
 	case "claude":
-		return nz(b.Model, os.Getenv("AURSCAN_MODEL"))
+		return nz(b.Model, os.Getenv("AURSCAN_CLAUDE_MODEL"))
 	case "cmd":
 		return b.Cmd
 	default:
@@ -150,6 +153,7 @@ func BackendsFromConfig(maps []map[string]string) []Backend {
 			continue
 		}
 		be.Model, be.URL, be.Fallback, be.APIKey = m["model"], m["url"], m["fallback"], m["api_key"]
+		be.Effort = m["effort"]
 		if v := m["temperature"]; v != "" {
 			if f, err := strconv.ParseFloat(v, 64); err == nil {
 				be.Temperature = &f
@@ -309,11 +313,42 @@ func annotateTimeout(err error, to time.Duration) error {
 }
 
 func callClaudeCLI(ctx context.Context, be Backend, instructions, content string, estIn int) (string, Usage, error) {
-	_ = be // the Claude Code CLI takes no model flag today; be.Model/APIKey are a future hook
+	// Model, effort and output-token limit each come from the llmN.conf entry,
+	// else from AURSCAN_CLAUDE_MODEL / AURSCAN_CLAUDE_EFFORT /
+	// AURSCAN_CLAUDE_MAX_TOKENS. A setting that is set nowhere is not passed at
+	// all, so Claude Code falls back to its own configuration
+	// (~/.claude/settings.json and its own env vars), exactly as when running
+	// `claude` by hand.
+	//
+	// The child inherits aurscan's environment, so Claude Code's own variables
+	// (CLAUDE_CODE_*, ANTHROPIC_*) reach it too. That includes ANTHROPIC_API_KEY,
+	// which the CLI may use instead of the subscription login. be.APIKey is not
+	// used here: the CLI has no flag for a key.
+	model := nz(be.Model, os.Getenv("AURSCAN_CLAUDE_MODEL"))
+	effort := nz(be.Effort, os.Getenv("AURSCAN_CLAUDE_EFFORT"))
+	maxTok := be.MaxTokens
+	if v := os.Getenv("AURSCAN_CLAUDE_MAX_TOKENS"); maxTok == 0 && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxTok = n
+		} else {
+			dbg("ignoring invalid AURSCAN_CLAUDE_MAX_TOKENS=%q", v)
+		}
+	}
 	run := func(args ...string) (string, error) {
+		if effort != "" {
+			args = append([]string{"--effort", effort}, args...)
+		}
+		if model != "" {
+			args = append([]string{"--model", model}, args...)
+		}
 		dbg("claude CLI args=%v", args)
 		dbgBlock("claude stdin (untrusted package content)", content)
 		c := exec.CommandContext(ctx, "claude", args...)
+		if maxTok > 0 {
+			// There is no CLI flag for the output-token limit; Claude Code reads
+			// it from this env var.
+			c.Env = append(os.Environ(), "CLAUDE_CODE_MAX_OUTPUT_TOKENS="+strconv.Itoa(maxTok))
+		}
 		c.Stdin = strings.NewReader(content)
 		var out, errb bytes.Buffer
 		c.Stdout, c.Stderr = &out, &errb

@@ -172,6 +172,11 @@ func TestModelIDResolution(t *testing.T) {
 	if got := (Backend{Kind: "openai"}).ModelID(); got != "gemma-3" {
 		t.Fatalf("openai ModelID from env = %q, want gemma-3", got)
 	}
+	t.Setenv("AURSCAN_MODEL", "api-only")
+	t.Setenv("AURSCAN_CLAUDE_MODEL", "opus")
+	if got := (Backend{Kind: "claude"}).ModelID(); got != "opus" {
+		t.Fatalf("claude ModelID from env = %q, want opus (not AURSCAN_MODEL)", got)
+	}
 	if got := (Backend{Kind: "cmd", Cmd: "/usr/bin/audit"}).ModelID(); got != "/usr/bin/audit" {
 		t.Fatalf("cmd ModelID = %q, want the command path", got)
 	}

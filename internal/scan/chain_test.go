@@ -76,6 +76,9 @@ func isolateEnv(t *testing.T) {
 	t.Setenv("AURSCAN_OPENAI_URL", "")
 	t.Setenv("AURSCAN_OPENAI_URL_FALLBACK", "")
 	t.Setenv("AURSCAN_OPENAI_MODEL", "")
+	t.Setenv("AURSCAN_CLAUDE_MODEL", "")
+	t.Setenv("AURSCAN_CLAUDE_EFFORT", "")
+	t.Setenv("AURSCAN_CLAUDE_MAX_TOKENS", "")
 	t.Setenv("AURSCAN_RULES_ONLY", "")
 }
 
@@ -85,7 +88,7 @@ func TestBackendsFromConfig(t *testing.T) {
 	got := BackendsFromConfig([]map[string]string{
 		{"backend": "openai", "url": "http://x", "model": "m", "api_key": "k"},
 		{"backend": "/usr/local/bin/scan"}, // a path => custom command (mirrors AURSCAN_BACKEND=/path)
-		{"backend": "claude"},
+		{"backend": "claude", "effort": "low", "max_tokens": "1500"},
 		{"model": "no-backend"}, // skipped: no backend=
 	})
 	if len(got) != 3 {
@@ -97,7 +100,7 @@ func TestBackendsFromConfig(t *testing.T) {
 	if got[1] != (Backend{Kind: "cmd", Cmd: "/usr/local/bin/scan"}) {
 		t.Fatalf("entry1 = %v", got[1])
 	}
-	if got[2].Kind != "claude" {
+	if got[2] != (Backend{Kind: "claude", Effort: "low", MaxTokens: 1500}) {
 		t.Fatalf("entry2 = %v", got[2])
 	}
 }
